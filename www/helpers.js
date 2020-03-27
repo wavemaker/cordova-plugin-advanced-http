@@ -325,7 +325,7 @@ module.exports = function init(global, jsUtil, cookieHandler, messages, base64, 
 
   function injectFileEntryHandler(cb) {
     return function (response) {
-      cb(createFileEntry(response.file));
+      cb(createFileEntry(response.file), response);
     }
   }
 
