@@ -2,7 +2,7 @@ const hooks = {
   onBeforeEachTest: function (resolve, reject) {
     cordova.plugin.http.clearCookies();
 
-    helpers.enableFollowingRedirect(function() {
+    helpers.enableFollowingRedirect(function () {
       // server trust mode is not supported on browser platform
       if (cordova.platformId === 'browser') {
         return resolve();
@@ -23,7 +23,7 @@ const helpers = {
   setPinnedServerTrustMode: function (resolve, reject) { cordova.plugin.http.setServerTrustMode('pinned', resolve, reject); },
   setNoneClientAuthMode: function (resolve, reject) { cordova.plugin.http.setClientAuthMode('none', resolve, reject); },
   setBufferClientAuthMode: function (resolve, reject) {
-    helpers.getWithXhr(function(pkcs) {
+    helpers.getWithXhr(function (pkcs) {
       cordova.plugin.http.setClientAuthMode('buffer', {
         rawPkcs: pkcs,
         pkcsPassword: 'badssl.com'
@@ -34,9 +34,9 @@ const helpers = {
   setUtf8StringSerializer: function (resolve) { resolve(cordova.plugin.http.setDataSerializer('utf8')); },
   setUrlEncodedSerializer: function (resolve) { resolve(cordova.plugin.http.setDataSerializer('urlencoded')); },
   setMultipartSerializer: function (resolve) { resolve(cordova.plugin.http.setDataSerializer('multipart')); },
-  setRawSerializer: function(resolve) { resolve(cordova.plugin.http.setDataSerializer('raw')); },
+  setRawSerializer: function (resolve) { resolve(cordova.plugin.http.setDataSerializer('raw')); },
   disableFollowingRedirect: function (resolve) { resolve(cordova.plugin.http.setFollowRedirect(false)); },
-  enableFollowingRedirect: function(resolve) { resolve(cordova.plugin.http.setFollowRedirect(true)); },
+  enableFollowingRedirect: function (resolve) { resolve(cordova.plugin.http.setFollowRedirect(true)); },
   getWithXhr: function (done, url, type) {
     var xhr = new XMLHttpRequest();
 
@@ -71,7 +71,7 @@ const helpers = {
     var byteArray = new Uint8Array(buffer);
 
     for (var i = 0; i < byteArray.length; i++) {
-      hash  = ((hash << 5) - hash) + byteArray[i];
+      hash = ((hash << 5) - hash) + byteArray[i];
       hash |= 0; // Convert to 32bit integer
     }
 
@@ -83,10 +83,37 @@ const helpers = {
     }
 
     result.type.should.be.equal(expected);
+  },
+  isAbortSupported: function () {
+    // abort is not working reliably; will be documented in known issues
+    return false;
+
+    if (window.cordova && window.cordova.platformId === 'android') {
+      var version = device.version; // NOTE will throw error if cordova is present without cordova-plugin-device
+      var major = parseInt(/^(\d+)(\.|$)/.exec(version)[1], 10);
+      return isFinite(major) && major >= 6;
+    }
+    return true;
+  },
+  getAbortDelay: function () { return 0; },
+  getDemoArrayBuffer: function(size) {
+    var demoText = [73, 39, 109, 32, 97, 32, 100, 117, 109, 109, 121, 32, 102, 105, 108, 101, 33, 32, 73, 39, 109, 32, 117, 115, 101, 100, 32, 102, 111, 114, 32, 116, 101, 115, 116, 105, 110, 103, 32, 112, 117, 114, 112, 111, 115, 101, 115, 46, 32, 82, 97, 110, 100, 111, 109, 32, 100, 97, 116, 97, 32, 105, 115, 32, 102, 111, 108, 108, 111, 119, 105, 110, 103, 58, 32];
+    var buffer = new ArrayBuffer(size);
+    var view = new Uint8Array(buffer);
+
+    for (var i = 0; i < size; ++i) {
+      view[i] = demoText[i];
+    }
+
+    return buffer;
+  },
+  isTlsBlacklistSupported: function () {
+    return window.cordova && window.cordova.platformId === 'android';
   }
 };
 
 const messageFactory = {
+  handshakeFailed: function() { return 'TLS connection could not be established: javax.net.ssl.SSLHandshakeException: Handshake failed' },
   sslTrustAnchor: function () { return 'TLS connection could not be established: javax.net.ssl.SSLHandshakeException: java.security.cert.CertPathValidatorException: Trust anchor for certification path not found.' },
   invalidCertificate: function (domain) { return 'The certificate for this server is invalid. You might be connecting to a server that is pretending to be “' + domain + '” which could put your confidential information at risk.' }
 }
@@ -291,7 +318,7 @@ const tests = [
   {
     description: 'should resolve correct URL after redirect (GET) #33',
     expected: 'resolved: {"status": 200, url: "http://httpbin.org/anything", ...',
-    func: function (resolve, reject) { cordova.plugin.http.get('http://httpbin.org/redirect-to?url=http://httpbin.org/anything', {}, {}, resolve, reject); },
+    func: function (resolve, reject) { cordova.plugin.http.get('http://httpbingo.org/redirect-to?url=http://httpbin.org/anything', {}, {}, resolve, reject); },
     validationFunc: function (driver, result) {
       result.type.should.be.equal('resolved');
       result.data.url.should.be.equal('http://httpbin.org/anything');
@@ -300,8 +327,8 @@ const tests = [
   {
     description: 'should not follow 302 redirect when following redirects is disabled',
     expected: 'rejected: {"status": 302, ...',
-    before: function(resolve, reject) { cordova.plugin.http.disableRedirect(true, resolve, reject)},
-    func: function (resolve, reject) { cordova.plugin.http.get('http://httpbin.org/redirect-to?url=http://httpbin.org/anything', {}, {}, resolve, reject); },
+    before: function (resolve, reject) { cordova.plugin.http.setFollowRedirect(false); resolve(); },
+    func: function (resolve, reject) { cordova.plugin.http.get('http://httpbingo.org/redirect-to?url=http://httpbin.org/anything', {}, {}, resolve, reject); },
     validationFunc: function (driver, result) {
       result.type.should.be.equal('rejected');
       result.data.status.should.be.equal(302);
@@ -374,7 +401,7 @@ const tests = [
       var targetUrl = 'http://httpbin.org/post';
 
       helpers.writeToFile(function () {
-        helpers.writeToFile(function() {
+        helpers.writeToFile(function () {
           cordova.plugin.http.uploadFile(targetUrl, {}, {}, [sourcePath, sourcePath2], [fileName, fileName2], resolve, reject);
         }, fileName2, fileContent2);
       }, fileName, fileContent);
@@ -464,7 +491,7 @@ const tests = [
     }
   },
   {
-    description: 'should not send any cookies after running "clearCookies" (GET) #59',
+    description: 'should not send programmatically set cookies after running "clearCookies" (GET) #59',
     expected: 'resolved: {"status": 200, "data": "{\"headers\": {\"Cookie\": \"\"...',
     func: function (resolve, reject) {
       cordova.plugin.http.setCookie('http://httpbin.org/get', 'myCookie=myValue');
@@ -824,7 +851,7 @@ const tests = [
     before: helpers.setMultipartSerializer,
     func: function (resolve, reject) {
       var ponyfills = cordova.plugin.http.ponyfills;
-      helpers.getWithXhr(function(blob) {
+      helpers.getWithXhr(function (blob) {
         var formData = new ponyfills.FormData();
         formData.append('CordovaLogo', blob);
 
@@ -850,7 +877,7 @@ const tests = [
     expected: 'resolved: {"status":200,"data:application/octet-stream;base64,iVBORw0KGgoAAAANSUhEUg ...',
     before: helpers.setRawSerializer,
     func: function (resolve, reject) {
-      helpers.getWithXhr(function(buffer) {
+      helpers.getWithXhr(function (buffer) {
         cordova.plugin.http.post('http://httpbin.org/anything', buffer, {}, resolve, reject);
       }, './res/cordova_logo.png', 'arraybuffer');
     },
@@ -891,6 +918,19 @@ const tests = [
     }
   },
   {
+    description: 'should allow empty response body even though responseType is set #334',
+    expected: 'resolved: {"status":200, ...',
+    func: function (resolve, reject) {
+      var url = 'https://httpbin.org/status/200';
+      var options = { method: 'get', responseType: 'json' };
+      cordova.plugin.http.sendRequest(url, options, resolve, reject);
+    },
+    validationFunc: function (driver, result) {
+      result.type.should.be.equal('resolved');
+      should.equal(true, result.data.data === null || result.data.data === undefined);
+    }
+  },
+  {
     description: 'should decode JSON data correctly when response type is "json" #301',
     expected: 'resolved: {"status":200,"data":{"slideshow": ... ',
     func: function (resolve, reject) {
@@ -903,22 +943,22 @@ const tests = [
       result.data.status.should.be.equal(200);
       result.data.data.should.be.an('object');
       result.data.data.slideshow.should.be.eql({
-        author: 'Yours Truly', 
-        date: 'date of publication', 
+        author: 'Yours Truly',
+        date: 'date of publication',
         slides: [
           {
-            title: 'Wake up to WonderWidgets!', 
+            title: 'Wake up to WonderWidgets!',
             type: 'all'
-          }, 
+          },
           {
             items: [
               'Why <em>WonderWidgets</em> are great',
               'Who <em>buys</em> WonderWidgets'
-            ], 
-            title: 'Overview', 
+            ],
+            title: 'Overview',
             type: 'all'
           }
-        ], 
+        ],
         title: 'Sample Slide Show'
       });
     }
@@ -946,18 +986,186 @@ const tests = [
       });
     }
   },
+  {
+    description: 'should authenticate correctly when client cert auth is configured with a PKCS12 container',
+    expected: 'resolved: {"status": 200, ...',
+    before: helpers.setBufferClientAuthMode,
+    func: function (resolve, reject) { cordova.plugin.http.get('https://client.badssl.com/', {}, {}, resolve, reject); },
+    validationFunc: function (driver, result) {
+      result.type.should.be.equal('resolved');
+      result.data.data.should.include('TLS handshake');
+    }
+  },
+  {
+    description: 'should not send any cookies after running "clearCookies" (GET) #248',
+    expected: 'resolved: {"status": 200, "data": "{\"cookies\":{}} ...',
+    before: helpers.disableFollowingRedirect,
+    func: function (resolve, reject) {
+      cordova.plugin.http.get('https://httpbin.org/cookies/set?myCookieKey=myCookieValue', {}, {}, function () {
+        cordova.plugin.http.clearCookies();
+        cordova.plugin.http.get('https://httpbin.org/cookies', {}, {}, resolve, reject);
+      }, function () {
+        cordova.plugin.http.clearCookies();
+        cordova.plugin.http.get('https://httpbin.org/cookies', {}, {}, resolve, reject);
+      });
+    },
+    validationFunc: function (driver, result) {
+      result.type.should.be.equal('resolved');
+      result.data.status.should.be.equal(200);
+      JSON.parse(result.data.data).cookies.should.be.eql({});
+    }
+  },
+  {
+    description: 'should be able to abort (POST)',
+    expected: 'rejected: {"status":-8, "error": "Request ...}',
+    before: helpers.setRawSerializer,
+    func: function (resolve, reject, skip) {
+      if (!helpers.isAbortSupported()) {
+        return skip();
+      }
 
-  // TODO: not ready yet
-  // {
-  //   description: 'should authenticate correctly when client cert auth is configured with a PKCS12 container',
-  //   expected: 'resolved: {"status": 200, ...',
-  //   before: helpers.setBufferClientAuthMode,
-  //   func: function (resolve, reject) { cordova.plugin.http.get('https://client.badssl.com/', {}, {}, resolve, reject); },
-  //   validationFunc: function (driver, result) {
-  //     result.type.should.be.equal('resolved');
-  //     result.data.data.should.include('TLS handshake');
-  //   }
-  // }
+      var targetUrl = 'http://httpbin.org/post';
+      var fileContent = helpers.getDemoArrayBuffer(10000);
+      var reqId = cordova.plugin.http.post(targetUrl, fileContent, {}, resolve, reject);
+
+      setTimeout(function () {
+        cordova.plugin.http.abort(reqId);
+      }, helpers.getAbortDelay());
+    },
+    validationFunc: function (driver, result) {
+      helpers.checkResult(result, 'rejected');
+      result.data.status.should.be.equal(-8);
+    }
+  },
+  {
+    description: 'should be able to abort (GET)',
+    expected: 'rejected: {"status":-8, "error": "Request ...}',
+    func: function (resolve, reject, skip) {
+      if (!helpers.isAbortSupported()) {
+        return skip();
+      }
+      var url = 'https://httpbin.org/drip?duration=2&numbytes=10&code=200';
+      var options = { method: 'get', responseType: 'blob' };
+      var success = function (response) {
+        resolve({
+          isBlob: response.data.constructor === Blob,
+          type: response.data.type,
+          byteLength: response.data.size
+        });
+      };
+
+      var reqId = cordova.plugin.http.sendRequest(url, options, success, reject);
+      setTimeout(function () {
+        cordova.plugin.http.abort(reqId);
+      }, helpers.getAbortDelay());
+    },
+    validationFunc: function (driver, result) {
+      helpers.checkResult(result, 'rejected');
+      result.data.status.should.be.equal(-8);
+    }
+  },
+  {
+    description: 'should be able to abort downloading a file',
+    expected: 'rejected: {"status":-8, "error": "Request ...}',
+    func: function (resolve, reject, skip) {
+      if (!helpers.isAbortSupported()) {
+        return skip();
+      }
+      var sourceUrl = 'http://httpbin.org/xml';
+      var targetPath = cordova.file.cacheDirectory + 'test.xml';
+
+      var reqId = cordova.plugin.http.downloadFile(sourceUrl, {}, {}, targetPath, function (entry) {
+        helpers.getWithXhr(function (content) {
+          resolve({
+            sourceUrl: sourceUrl,
+            targetPath: targetPath,
+            fullPath: entry.fullPath,
+            name: entry.name,
+            content: content
+          });
+        }, targetPath);
+      }, reject);
+
+      setTimeout(function () {
+        cordova.plugin.http.abort(reqId);
+      }, helpers.getAbortDelay());
+
+    },
+    validationFunc: function (driver, result) {
+      helpers.checkResult(result, 'rejected');
+      result.data.status.should.be.equal(-8);
+    }
+  },
+  {
+    description: 'should be able to abort uploading a file',
+    expected: 'rejected: {"status":-8, "error": "Request ...}',
+    func: function (resolve, reject, skip) {
+      if (!helpers.isAbortSupported()) {
+        return skip();
+      }
+
+
+      var fileName = 'test-file.txt';
+      var fileContent = helpers.getDemoArrayBuffer(10000);
+      var sourcePath = cordova.file.cacheDirectory + fileName;
+      var targetUrl = 'http://httpbin.org/post';
+
+      helpers.writeToFile(function () {
+
+        var reqId = cordova.plugin.http.uploadFile(targetUrl, {}, {}, sourcePath, fileName, resolve, reject);
+
+        setTimeout(function () {
+          cordova.plugin.http.abort(reqId);
+        }, helpers.getAbortDelay());
+
+      }, fileName, fileContent);
+    },
+    validationFunc: function (driver, result) {
+      helpers.checkResult(result, 'rejected');
+      result.data.status.should.be.equal(-8);
+    }
+  },
+  {
+    description: 'should not send malformed request when FormData is empty #372',
+    expected: 'resolved: {"status":200, ...',
+    before: helpers.setMultipartSerializer,
+    func: function (resolve, reject) {
+      var ponyfills = cordova.plugin.http.ponyfills;
+      var formData = new ponyfills.FormData();
+
+      var url = 'http://httpbin.org/anything';
+      var options = { method: 'post', data: formData };
+      cordova.plugin.http.sendRequest(url, options, resolve, reject);
+    },
+    validationFunc: function (driver, result, targetInfo) {
+      helpers.checkResult(result, 'resolved');
+
+      var parsed = JSON.parse(result.data.data);
+
+      if (targetInfo.isAndroid) {
+        // boundary should be sent correctly on Android
+        parsed.headers['Content-Type'].should.be.equal('multipart/form-data; boundary=00content0boundary00');
+      } else {
+        // falling back to empty url encoded request on iOS
+        parsed.headers['Content-Type'].should.be.equal('application/x-www-form-urlencoded');
+      }
+    }
+  },
+  {
+    description: 'should reject connecting to server with blacklisted SSL version #420',
+    expected: 'rejected: {"status":-2, ...',
+    func: function (resolve, reject, skip) {
+      if (!helpers.isTlsBlacklistSupported()) {
+        return skip();
+      }
+
+      cordova.plugin.http.get('https://tls-v1-0.badssl.com:1010/', {}, {}, resolve, reject);
+    },
+    validationFunc: function (driver, result) {
+      result.type.should.be.equal('rejected');
+      result.data.should.be.eql({ status: -2, error: messageFactory.handshakeFailed() });
+    }
+  },
 ];
 
 if (typeof module !== 'undefined' && module.exports) {

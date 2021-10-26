@@ -1,14 +1,14 @@
 const wd = require('wd');
 const chai = require('chai');
-const chaiAsPromised = require('chai-as-promised');
 const logging = require('./logging');
 const capsConfig = require('./caps');
 const serverConfig = require('./server');
 const testDefinitions = require('../e2e-specs');
 
-chai.use(chaiAsPromised);
-chaiAsPromised.transferPromiseness = wd.transferPromiseness;
 global.should = chai.should();
+
+let driver;
+let allPassed = true;
 
 describe('Advanced HTTP e2e test suite', function () {
   const isSauceLabs = !!process.env.SAUCE_USERNAME;
@@ -19,9 +19,6 @@ describe('Advanced HTTP e2e test suite', function () {
 
   const targetInfo = { isSauceLabs, isBrowserStack, isDevice, isAndroid };
   const environment = isSauceLabs ? 'saucelabs' : isBrowserStack ? 'browserstack' : 'local';
-
-  let driver;
-  let allPassed = true;
 
   this.timeout(15000);
   this.slow(4000);
@@ -52,12 +49,19 @@ describe('Advanced HTTP e2e test suite', function () {
   });
 
   const defineTestForMocha = (test, index) => {
-    it(index + ': ' + test.description, async () => {
+    it(index + ': ' + test.description, async function () {
       await clickNext(driver);
       await validateTestIndex(driver, index);
       await validateTestTitle(driver, test.description);
       await waitToBeFinished(driver, test.timeout || 10000);
-      await validateResult(driver, test.validationFunc, targetInfo);
+
+      const skipped = await checkSkipped(driver);
+
+      if (skipped) {
+        this.skip();
+      } else {
+        await validateResult(driver, test.validationFunc, targetInfo);
+      }
     });
   };
 
@@ -117,7 +121,20 @@ async function waitToBeFinished(driver, timeout) {
 
 async function validateResult(driver, validationFunc, targetInfo) {
   const result = await driver.safeExecute('app.lastResult');
-  validationFunc(driver, result, targetInfo);
+
+  try {
+    validationFunc(driver, result, targetInfo);
+  } catch (error) {
+    allPassed = false;
+    error.details = result;
+
+    throw error;
+  }
+}
+
+async function checkSkipped(driver) {
+  const result = await driver.safeExecute('app.lastResult');
+  return result.type === 'skipped';
 }
 
 function sleep(ms) {

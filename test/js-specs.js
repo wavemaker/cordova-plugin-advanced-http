@@ -1,5 +1,4 @@
 const chai = require('chai');
-const mock = require('mock-require');
 const util = require('util');
 const should = chai.should();
 
@@ -48,6 +47,13 @@ describe('Advanced HTTP public interface', function () {
   it('sets global headers correctly with three args (new interface) #24', () => {
     http.setHeader('*', 'myKey', 'myValue');
     http.getHeaders('*').myKey.should.equal('myValue');
+  });
+
+  it('clears global headers correctly when value is undefined', () => {
+    http.setHeader('*', 'myKey', 'myValue');
+    http.setHeader('*', 'myKey', null);
+    should.equal(undefined, http.getHeaders('*').myKey);
+    Object.keys(http.getHeaders('*')).length.should.be.equal(0);
   });
 
   it('sets host headers correctly #24', () => {
@@ -142,11 +148,31 @@ describe('Advanced HTTP public interface', function () {
   it('configures global timeout value correctly with given valid value', () => {
     http.setRequestTimeout(10);
     http.getRequestTimeout().should.equal(10);
+    http.getConnectTimeout().should.equal(10);
+    http.getReadTimeout().should.equal(10);
   });
 
   it('throws an Error when you try to configure global timeout with a string', () => {
     (() => { http.setRequestTimeout('myString'); }).should.throw(messages.INVALID_TIMEOUT_VALUE);
   });
+
+  it('configures connect timeout value correctly with given valid value', () => {
+    http.setConnectTimeout(10);
+    http.getConnectTimeout().should.equal(10);
+  })
+
+  it('throws an Error when you try to configure connect timeout with a string', () => {
+    (() => { http.setConnectTimeout('myString'); }).should.throw(messages.INVALID_TIMEOUT_VALUE);
+  })
+
+  it('configures read timeout value correctly with given valid value', () => {
+    http.setReadTimeout(10);
+    http.getReadTimeout().should.equal(10);
+  })
+
+  it('throws an Error when you try to configure connect timeout with a string', () => {
+    (() => { http.setReadTimeout('myString'); }).should.throw(messages.INVALID_TIMEOUT_VALUE);
+  })
 
   it('sets global option for following redirects correctly', () => {
     http.setFollowRedirect(false);
@@ -375,6 +401,8 @@ describe('Common helpers', function () {
       serializer: 'urlencoded',
       followRedirect: true,
       timeout: 60.0,
+      connectTimeout: 30.0,
+      readTimeout: 30.0
     }
 
     it('adds missing "followRedirect" option correctly', () => {
@@ -419,7 +447,7 @@ describe('Common helpers', function () {
         response => response.data.should.be.equal('fakeData')
       );
 
-     handler({ data: 'fakeData' });
+      handler({ data: 'fakeData' });
     });
 
     it('does not change response data if response type is "text"', () => {
@@ -444,6 +472,17 @@ describe('Common helpers', function () {
       handler({ data: JSON.stringify(fakeData) });
     });
 
+    it('handles empty "json" response correctly', () => {
+      const emptyData = "";
+      const helpers = require('../www/helpers')(null, jsUtil, null, messages, null, errorCodes);
+      const handler = helpers.injectRawResponseHandler(
+        'json',
+        response => should.equal(undefined, response.data)
+      );
+
+      handler({ data: emptyData });
+    });
+
     it('handles response type "arraybuffer" correctly', () => {
       const helpers = require('../www/helpers')(null, jsUtil, null, messages, fakeBase64, errorCodes);
       const handler = helpers.injectRawResponseHandler(
@@ -452,6 +491,16 @@ describe('Common helpers', function () {
       );
 
       handler({ data: 'myString' });
+    });
+
+    it('handles empty "arraybuffer" response correctly', () => {
+      const helpers = require('../www/helpers')(null, jsUtil, null, messages, fakeBase64, errorCodes);
+      const handler = helpers.injectRawResponseHandler(
+        'arraybuffer',
+        response => should.equal(null, response.data)
+      );
+
+      handler({ data: '' });
     });
 
     it('handles response type "blob" correctly', () => {
@@ -465,7 +514,19 @@ describe('Common helpers', function () {
         }
       );
 
-      handler({ data: 'myString', headers: { 'content-type': 'fakeType'} });
+      handler({ data: 'myString', headers: { 'content-type': 'fakeType' } });
+    });
+
+    it('handles empty "blob" response correctly', () => {
+      const helpers = require('../www/helpers')(null, jsUtil, null, messages, fakeBase64, errorCodes);
+      const handler = helpers.injectRawResponseHandler(
+        'blob',
+        (response) => {
+          should.equal(null, response.data)
+        }
+      );
+
+      handler({ data: '', headers: { 'content-type': 'fakeType' } });
     });
 
     it('calls failure callback when post-processing fails', () => {
@@ -546,7 +607,7 @@ describe('Common helpers', function () {
 
     it('processes data correctly when serializer "utf8" is configured', (cb) => {
       helpers.processData('myString', 'utf8', (data) => {
-        data.should.be.eql({text: 'myString'});
+        data.should.be.eql({ text: 'myString' });
         cb();
       })
     });
@@ -590,13 +651,65 @@ describe('Common helpers', function () {
       });
     });
 
+    it('processes data correctly when serializer "multipart" is configured and form data contains file value (filename set)', (cb) => {
+      const formData = new FormDataMock();
+      formData.append('myFile', new BlobMock([testString], { type: 'application/octet-stream' }), 'file.name');
+
+      helpers.processData(formData, 'multipart', (data) => {
+        data.buffers.length.should.be.equal(1);
+        data.names.length.should.be.equal(1);
+        data.fileNames.length.should.be.equal(1);
+        data.types.length.should.be.equal(1);
+
+        data.buffers[0].should.be.eql(testStringBase64);
+        data.names[0].should.be.equal('myFile');
+        data.fileNames[0].should.be.equal('file.name');
+        data.types[0].should.be.equal('application/octet-stream');
+
+        cb();
+      });
+    });
+
+    it('processes data correctly when serializer "multipart" is configured and form data contains file value (filename empty)', (cb) => {
+      const formData = new FormDataMock();
+      formData.append('myFile', new BlobMock([testString], { type: 'application/octet-stream' }), '');
+
+      helpers.processData(formData, 'multipart', (data) => {
+        data.buffers.length.should.be.equal(1);
+        data.names.length.should.be.equal(1);
+        data.fileNames.length.should.be.equal(1);
+        data.types.length.should.be.equal(1);
+
+        data.buffers[0].should.be.eql(testStringBase64);
+        data.names[0].should.be.equal('myFile');
+        data.fileNames[0].should.be.equal('');
+        data.types[0].should.be.equal('application/octet-stream');
+
+        cb();
+      });
+    });
+
     it('processes data correctly when serializer "raw" is configured', (cb) => {
-      const byteArray = new Uint8Array([1,2,3]);
+      const byteArray = new Uint8Array([1, 2, 3]);
       helpers.processData(byteArray, 'raw', (data) => {
         data.should.be.a('ArrayBuffer');
         data.should.be.equal(byteArray.buffer);
         cb();
       })
+    });
+  });
+
+  describe('nextRequestId()', function () {
+    const helpers = require('../www/helpers')(null, null, null, null, null, null);
+
+    it('returns number requestIds', () => {
+      helpers.nextRequestId().should.be.a('number');
+    });
+
+    it('returns unique requestIds', () => {
+      const ids = [helpers.nextRequestId(), helpers.nextRequestId(), helpers.nextRequestId()];
+      const set = new Set(ids);
+      ids.should.to.deep.equal(Array.from(set));
     });
   });
 });
@@ -647,7 +760,7 @@ describe('Dependency Validator', function () {
   describe('checkFormDataInstance()', function () {
     it('throws an error if FormData.entries() is not supported on given instance', function () {
       const console = new ConsoleMock();
-      const validator = require('../www/dependency-validator')({ FormData: {}}, console, messages);
+      const validator = require('../www/dependency-validator')({ FormData: {} }, console, messages);
 
       (() => validator.checkFormDataInstance({})).should.throw(messages.MISSING_FORMDATA_ENTRIES_API);
     });
@@ -684,12 +797,12 @@ describe('Ponyfills', function () {
         const iterator = new ponyfills.Iterator([]);
         iterator.next().should.be.eql({ done: true, value: undefined });
       });
-  
+
       it('returns iteration object correctly when end posititon of list is not reached yet', () => {
         const iterator = new ponyfills.Iterator([['first', 'this is the first item']]);
         iterator.next().should.be.eql({ done: false, value: ['first', 'this is the first item'] });
       });
-  
+
       it('returns iteration object correctly when end posititon of list is already reached', () => {
         const iterator = new ponyfills.Iterator([['first', 'this is the first item']]);
         iterator.next();
