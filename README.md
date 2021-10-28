@@ -29,9 +29,9 @@ The plugin conforms to the Cordova plugin specification, it can be installed
 using the Cordova / Phonegap command line interface.
 
 ```shell
-phonegap plugin add cordova-plugin-advanced-http
+phonegap plugin add wm-cordova-plugin-advanced-http
 
-cordova plugin add cordova-plugin-advanced-http
+cordova plugin add wm-cordova-plugin-advanced-http
 ```
 
 ### Plugin Preferences
