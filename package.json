@@ -1,6 +1,6 @@
 {
   "name": "wm-cordova-plugin-advanced-http",
-  "version": "1.0.1",
+  "version": "1.2.0",
   "description": "Cordova / Phonegap plugin for communicating with HTTP servers using SSL pinning",
   "scripts": {
     "updatecert": "node ./scripts/update-e2e-server-cert.js && node ./scripts/update-e2e-client-cert.js",
