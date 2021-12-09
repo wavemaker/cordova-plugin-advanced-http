@@ -10,6 +10,7 @@ import java.net.SocketTimeoutException;
 import java.net.UnknownHostException;
 
 import java.nio.ByteBuffer;
+import java.util.List;
 
 import javax.net.ssl.SSLException;
 
@@ -25,6 +26,7 @@ import org.json.JSONObject;
 
 import android.util.Base64;
 import android.util.Log;
+import android.webkit.CookieManager;
 
 abstract class CordovaHttpBase implements Runnable {
   protected static final String TAG = "Cordova-Plugin-HTTP";
@@ -209,6 +211,7 @@ abstract class CordovaHttpBase implements Runnable {
     response.setHeaders(request.headers());
 
     if (request.code() >= 200 && request.code() < 300) {
+      this.addCookiesToWebView(request);
       if ("text".equals(this.responseType) || "json".equals(this.responseType)) {
         String decoded = HttpBodyDecoder.decodeBody(outputStream.toByteArray(), request.charset());
         response.setBody(decoded);
@@ -217,6 +220,19 @@ abstract class CordovaHttpBase implements Runnable {
       }
     } else {
       response.setErrorMessage(HttpBodyDecoder.decodeBody(outputStream.toByteArray(), request.charset()));
+    }
+  }
+
+  protected void addCookiesToWebView(HttpRequest httpRequest) {
+    if (httpRequest.headers() == null) {
+      return;
+    }
+    List<String> cookies = httpRequest.headers().get("Set-Cookie");
+    if (cookies == null) {
+      return;
+    }
+    for (int i = 0; i < cookies.size(); i++) {
+      CookieManager.getInstance().setCookie(httpRequest.url().toString(), cookies.get(i));
     }
   }
 

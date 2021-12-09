@@ -1,3 +1,4 @@
+#import <WebKit/WebKit.h>
 #import "CordovaHttpPlugin.h"
 #import "CDVFile.h"
 #import "BinaryRequestSerializer.h"
@@ -112,6 +113,11 @@
 
 - (void)handleSuccess:(NSMutableDictionary*)dictionary withResponse:(NSHTTPURLResponse*)response andData:(id)data {
     if (response != nil) {
+        WKWebsiteDataStore* dataStore = [WKWebsiteDataStore defaultDataStore];
+        NSArray *cookies = [NSHTTPCookie cookiesWithResponseHeaderFields:response.allHeaderFields forURL:response.URL];
+        [cookies enumerateObjectsUsingBlock:^(id cookie, NSUInteger idx, BOOL *stop) {
+            [[dataStore httpCookieStore] setCookie:cookie completionHandler:^{}];
+        }];
         [dictionary setValue:response.URL.absoluteString forKey:@"url"];
         [dictionary setObject:[NSNumber numberWithInt:(int)response.statusCode] forKey:@"status"];
         [dictionary setObject:[self copyHeaderFields:response.allHeaderFields] forKey:@"headers"];
